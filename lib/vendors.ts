@@ -186,3 +186,28 @@ export function totalConfirmedFixedMonthly(): number {
   // recomputed, not stale, once something actually becomes a paid plan.
   return 0;
 }
+
+export const BILLING_TYPES: BillingType[] = ["usage", "fixed", "free", "deferred", "not_used"];
+
+export type VendorStats = {
+  total: number;
+  liveTracked: number;
+  needsAttention: number; // verify + needs_input
+  confirmed: number;
+  byBillingType: { type: BillingType; count: number }[];
+};
+
+/** Pure counts derived from the vendor register — no fetching, no cost math
+ *  beyond what's already known. Used to drive the dashboard's stat tiles. */
+export function summarizeVendors(vendors: Vendor[] = VENDORS): VendorStats {
+  return {
+    total: vendors.length,
+    liveTracked: vendors.filter((v) => !!v.liveTracked).length,
+    needsAttention: vendors.filter((v) => v.verifyStatus !== "confirmed").length,
+    confirmed: vendors.filter((v) => v.verifyStatus === "confirmed").length,
+    byBillingType: BILLING_TYPES.map((type) => ({
+      type,
+      count: vendors.filter((v) => v.billingType === type).length,
+    })),
+  };
+}
