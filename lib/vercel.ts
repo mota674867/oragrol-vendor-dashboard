@@ -49,12 +49,12 @@ function env(name: string): string | undefined {
   return v && v.trim().length > 0 ? v.trim() : undefined;
 }
 
-/** Resolves which team to query: explicit VERCEL_TEAM_SLUG/VERCEL_TEAM_ID env var,
+/** Resolves which team to query: explicit VC_TEAM_SLUG/VC_TEAM_ID env var,
  *  or — if neither is set — the first team the token can see. Never silently
  *  guesses when there's more than one team and nothing was specified. */
 async function resolveTeam(token: string): Promise<{ id: string; slug: string } | { error: string }> {
-  const explicitId = env("VERCEL_TEAM_ID");
-  const explicitSlug = env("VERCEL_TEAM_SLUG");
+  const explicitId = env("VC_TEAM_ID");
+  const explicitSlug = env("VC_TEAM_SLUG");
   if (explicitId || explicitSlug) {
     // We still need the id for the API call and slug for display; look it up either way.
   }
@@ -73,15 +73,15 @@ async function resolveTeam(token: string): Promise<{ id: string; slug: string } 
   if (explicitId) {
     const match = teams.find((t) => t.id === explicitId);
     if (match) return match;
-    return { error: `VERCEL_TEAM_ID=${explicitId} not found among teams this token can see.` };
+    return { error: `VC_TEAM_ID=${explicitId} not found among teams this token can see.` };
   }
   if (explicitSlug) {
     const match = teams.find((t) => t.slug === explicitSlug);
     if (match) return match;
-    return { error: `VERCEL_TEAM_SLUG=${explicitSlug} not found among teams this token can see.` };
+    return { error: `VC_TEAM_SLUG=${explicitSlug} not found among teams this token can see.` };
   }
   if (teams.length > 1) {
-    return { error: `Token can see ${teams.length} teams and none was specified — set VERCEL_TEAM_SLUG to pick one.` };
+    return { error: `Token can see ${teams.length} teams and none was specified — set VC_TEAM_SLUG to pick one.` };
   }
   return teams[0];
 }
@@ -91,9 +91,9 @@ async function resolveTeam(token: string): Promise<{ id: string; slug: string } 
  *  zero-cost result) if anything about the call fails — an empty/failed
  *  fetch must never be displayed as "confirmed $0". */
 export async function getVercelUsageSummary(days = 30): Promise<VercelUsageSummary> {
-  const token = env("VERCEL_API_TOKEN");
+  const token = env("VC_API_TOKEN");
   if (!token) {
-    return { ok: false, error: "VERCEL_API_TOKEN not set." };
+    return { ok: false, error: "VC_API_TOKEN not set." };
   }
 
   const team = await resolveTeam(token);

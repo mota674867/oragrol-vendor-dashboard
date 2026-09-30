@@ -19,7 +19,7 @@ where a vendor's API supports it (starting with Vercel).
 
 1. `npm install`
 2. Copy `.env.local.example` to `.env.local`, fill in `DASHBOARD_PASSWORD`
-   and `VERCEL_API_TOKEN`.
+   and `VC_API_TOKEN`.
 3. `npm run dev` — open http://localhost:3000, browser will prompt for the
    password.
 
