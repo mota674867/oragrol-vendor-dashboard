@@ -1,22 +1,8 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import type { VercelUsageSummary } from "@/lib/vercel";
 
 const BAR_COLORS = ["var(--cat-1)", "var(--cat-2)", "var(--cat-3)", "var(--cat-4)", "var(--cat-5)"];
 
-export default function VercelSpendPanel() {
-  const [data, setData] = useState<VercelUsageSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/vercel-usage")
-      .then((r) => r.json())
-      .then(setData)
-      .catch((err) => setData({ ok: false, error: "Request failed", detail: String(err) }))
-      .finally(() => setLoading(false));
-  }, []);
-
+export default function VercelSpendPanel({ data, loading }: { data: VercelUsageSummary | null; loading: boolean }) {
   const max = data?.ok ? Math.max(...data.byService.map((s) => s.totalCost), 0.0001) : 1;
 
   return (

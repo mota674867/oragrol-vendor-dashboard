@@ -37,6 +37,7 @@ export type VercelUsageSummary = {
   totalBilledCost: number;
   currency: string;
   byService: { serviceName: string; providerName: string; totalCost: number; charges: number }[];
+  byDay: { date: string; totalCost: number }[]; // real daily buckets from ChargePeriodStart — for day-by-day cost control, not simulated
   charges: FocusCharge[];
 } | {
   ok: false;
@@ -116,6 +117,36 @@ export async function getVercelUsageSummary(days = 30): Promise<VercelUsageSumma
 
   if (!res.ok) {
     const bodyText = await res.text().catch(() => "");
+    // A 404 with error.code "costs_not_found" is Vercel's real answer for
+    // "no billing charges exist for this team in this range" — verified
+    // live against this account on 2026-09-30 (Hobby plan, zero invoices).
+    // That's a genuine $0, not a failure, so render it as one: an honest
+    // empty result, same shape as a real zero-charge response. Any other
+    // non-2xx (auth, 5xx, etc.) still surfaces as a real error.
+    let isNoCosts = false;
+    try {
+      const parsed = JSON.parse(bodyText);
+      isNoCosts = res.status === 404 && parsed?.error?.code === "costs_not_found";
+    } catch {
+      // not JSON — fall through, treat as a real error below
+    }
+    if (isNoCosts) {
+      const days: { date: string; totalCost: number }[] = [];
+      for (let d = new Date(from); d <= to; d.setUTCDate(d.getUTCDate() + 1)) {
+        days.push({ date: d.toISOString().slice(0, 10), totalCost: 0 });
+      }
+      return {
+        ok: true,
+        teamSlug: team.slug,
+        rangeFrom: from.toISOString(),
+        rangeTo: to.toISOString(),
+        totalBilledCost: 0,
+        currency: "USD",
+        byService: [],
+        byDay: days,
+        charges: [],
+      };
+    }
     return {
       ok: false,
       error: `Vercel billing API returned ${res.status} ${res.statusText}`,
@@ -139,24 +170,33 @@ export async function getVercelUsageSummary(days = 30): Promise<VercelUsageSumma
   }
 
   const byServiceMap = new Map<string, { serviceName: string; providerName: string; totalCost: number; charges: number }>();
+  const byDayMap = new Map<string, number>();
+  // Pre-seed every day in range with 0 so the daily trend shows real flat
+  // zeros, not gaps — "even a $0 day should show as zero", not be absent.
+  for (let d = new Date(from); d <= to; d.setUTCDate(d.getUTCDate() + 1)) {
+    byDayMap.set(d.toISOString().slice(0, 10), 0);
+  }
   let totalBilledCost = 0;
   let currency = "USD";
   for (const c of charges) {
-    totalBilledCost += Number(c.BilledCost) || 0;
+    const cost = Number(c.BilledCost) || 0;
+    totalBilledCost += cost;
     currency = c.BillingCurrency || currency;
     const key = `${c.ServiceProviderName}::${c.ServiceName}`;
     const existing = byServiceMap.get(key);
     if (existing) {
-      existing.totalCost += Number(c.BilledCost) || 0;
+      existing.totalCost += cost;
       existing.charges += 1;
     } else {
       byServiceMap.set(key, {
         serviceName: c.ServiceName,
         providerName: c.ServiceProviderName,
-        totalCost: Number(c.BilledCost) || 0,
+        totalCost: cost,
         charges: 1,
       });
     }
+    const day = (c.ChargePeriodStart || "").slice(0, 10);
+    if (day) byDayMap.set(day, (byDayMap.get(day) ?? 0) + cost);
   }
 
   return {
@@ -167,6 +207,7 @@ export async function getVercelUsageSummary(days = 30): Promise<VercelUsageSumma
     totalBilledCost: Math.round(totalBilledCost * 1_000_000) / 1_000_000,
     currency,
     byService: [...byServiceMap.values()].sort((a, b) => b.totalCost - a.totalCost),
+    byDay: [...byDayMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, totalCost]) => ({ date, totalCost })),
     charges,
   };
 }

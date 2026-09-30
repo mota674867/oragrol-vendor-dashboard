@@ -1,7 +1,4 @@
-import StatTile from "@/components/StatTile";
-import BillingMixPanel from "@/components/BillingMixPanel";
-import VercelSpendPanel from "@/components/VercelSpendPanel";
-import VendorTable from "@/components/VendorTable";
+import DashboardClient from "@/components/DashboardClient";
 import { VENDORS, summarizeVendors } from "@/lib/vendors";
 
 export default function Home() {
@@ -20,24 +17,7 @@ export default function Home() {
         Every vendor, API and subscription the business depends on, in one accountable view.
       </p>
 
-      <div className="flex gap-4 flex-wrap mb-6">
-        <StatTile label="Vendors tracked" value={String(stats.total)} />
-        <StatTile label="Live-tracked" value={String(stats.liveTracked)} accent="pulled automatically" />
-        <StatTile
-          label="Needs attention"
-          value={String(stats.needsAttention)}
-          tone={stats.needsAttention > 0 ? "warning" : "default"}
-          accent="verify / needs input"
-        />
-        <StatTile label="Confirmed" value={String(stats.confirmed)} tone="default" />
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-4 mb-6">
-        <VercelSpendPanel />
-        <BillingMixPanel stats={stats} />
-      </div>
-
-      <VendorTable vendors={VENDORS} />
+      <DashboardClient vendors={VENDORS} stats={stats} />
     </main>
   );
 }

@@ -47,7 +47,16 @@ function Badge({ color, label }: { color: string; label: string }) {
 
 const STATUS_FILTERS: ("all" | VerifyStatus)[] = ["all", "confirmed", "verify", "needs_input"];
 
-export default function VendorTable({ vendors }: { vendors: Vendor[] }) {
+export default function VendorTable({
+  vendors,
+  liveUsageById,
+}: {
+  vendors: Vendor[];
+  /** Real Vercel-matched $ this month, keyed by vendor id. undefined = no
+   *  live match attempted for this vendor; null = live fetch failed (show
+   *  the failure, not a fake number); number = the real matched figure. */
+  liveUsageById: Record<string, number | null | undefined>;
+}) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | VerifyStatus>("all");
 
@@ -105,44 +114,61 @@ export default function VendorTable({ vendors }: { vendors: Vendor[] }) {
               <th className="py-2 px-5 font-medium">Vendor</th>
               <th className="py-2 px-3 font-medium">Used by</th>
               <th className="py-2 px-3 font-medium">Billing</th>
-              <th className="py-2 px-3 font-medium">Rate / notes</th>
+              <th className="py-2 px-3 font-medium text-right">Fixed $/mo</th>
+              <th className="py-2 px-3 font-medium">Payment date</th>
+              <th className="py-2 px-3 font-medium text-right">Usage $ (month)</th>
               <th className="py-2 px-3 font-medium">Status</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((v) => (
-              <tr key={v.id} className="align-top" style={{ borderTop: "1px solid var(--border)" }}>
-                <td className="py-3 px-5 font-medium" style={{ color: "var(--text-primary)" }}>
-                  {v.checkUrl ? (
-                    <a href={v.checkUrl} target="_blank" rel="noopener" className="hover:underline">
-                      {v.name}
-                    </a>
-                  ) : (
-                    v.name
-                  )}
-                  {v.liveTracked && (
-                    <span className="ml-2 text-[10px] uppercase tracking-wide whitespace-nowrap" style={{ color: "var(--cat-3)" }}>
-                      ● live
-                    </span>
-                  )}
-                </td>
-                <td className="py-3 px-3" style={{ color: "var(--text-secondary)" }}>
-                  {v.usedBy.join(", ") || "—"}
-                </td>
-                <td className="py-3 px-3">
-                  <Badge color={BILLING_COLOR[v.billingType]} label={BILLING_LABEL[v.billingType]} />
-                </td>
-                <td className="py-3 px-3 max-w-sm" style={{ color: "var(--text-secondary)" }}>
-                  {v.billingNote}
-                </td>
-                <td className="py-3 px-3">
-                  <Badge color={VERIFY_COLOR[v.verifyStatus]} label={VERIFY_LABEL[v.verifyStatus]} />
-                </td>
-              </tr>
-            ))}
+            {filtered.map((v) => {
+              const live = liveUsageById[v.id];
+              const usageDisplay = v.vercelServiceMatch
+                ? live === null
+                  ? null // live fetch failed — render a flag, not a number
+                  : live ?? 0
+                : v.usageAmountThisMonth;
+
+              return (
+                <tr key={v.id} className="align-top" style={{ borderTop: "1px solid var(--border)" }}>
+                  <td className="py-3 px-5 font-medium" style={{ color: "var(--text-primary)" }}>
+                    {v.checkUrl ? (
+                      <a href={v.checkUrl} target="_blank" rel="noopener" className="hover:underline">
+                        {v.name}
+                      </a>
+                    ) : (
+                      v.name
+                    )}
+                    {v.liveTracked && (
+                      <span className="ml-2 text-[10px] uppercase tracking-wide whitespace-nowrap" style={{ color: "var(--cat-3)" }}>
+                        ● live
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3 px-3" style={{ color: "var(--text-secondary)" }}>
+                    {v.usedBy.join(", ") || "—"}
+                  </td>
+                  <td className="py-3 px-3">
+                    <Badge color={BILLING_COLOR[v.billingType]} label={BILLING_LABEL[v.billingType]} />
+                  </td>
+                  <td className="py-3 px-3 text-right tabular-nums" style={{ color: "var(--text-primary)" }}>
+                    ${v.monthlyFixedAmount.toFixed(2)}
+                  </td>
+                  <td className="py-3 px-3" style={{ color: "var(--text-secondary)" }}>
+                    {v.paymentDate ?? "—"}
+                  </td>
+                  <td className="py-3 px-3 text-right tabular-nums" style={{ color: usageDisplay === null ? "var(--status-critical)" : "var(--text-primary)" }}>
+                    {usageDisplay === null ? "live pull failed" : `$${usageDisplay.toFixed(2)}`}
+                  </td>
+                  <td className="py-3 px-3">
+                    <Badge color={VERIFY_COLOR[v.verifyStatus]} label={VERIFY_LABEL[v.verifyStatus]} />
+                  </td>
+                </tr>
+              );
+            })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+                <td colSpan={7} className="py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
                   No vendors match that search/filter.
                 </td>
               </tr>
@@ -152,7 +178,8 @@ export default function VendorTable({ vendors }: { vendors: Vendor[] }) {
       </div>
 
       <p className="text-xs p-5 pt-4" style={{ color: "var(--text-muted)" }}>
-        Data source: <code>lib/vendors.ts</code> — edit that file to update a vendor&apos;s facts.
+        Data source: <code>lib/vendors.ts</code> — edit that file to update a vendor&apos;s facts. Rows marked{" "}
+        <span style={{ color: "var(--cat-3)" }}>● live</span> pull their Usage $ from Vercel&apos;s billing API automatically.
       </p>
     </div>
   );

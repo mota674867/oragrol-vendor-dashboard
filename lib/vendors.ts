@@ -10,6 +10,13 @@
 // at runtime — see app/api/vercel-usage/route.ts and, later, an ODO
 // cost proxy route. Edit this file directly to update a vendor's facts;
 // there's no database yet, this is intentionally simple to start.
+//
+// $ fields (monthlyFixedAmount, usageAmountThisMonth) are explicit 0 —
+// never omitted/defaulted — everywhere nothing is actually being charged,
+// per the standing rule: show a real zero, never hide it, never guess a
+// non-zero. A vendor tagged vercelServiceMatch gets its usage number
+// OVERRIDDEN at render time by the real live Vercel API figure — the 0
+// here is only the fallback shown before that live data loads/if it errors.
 
 export type BillingType = "usage" | "fixed" | "free" | "deferred" | "not_used";
 export type VerifyStatus = "confirmed" | "verify" | "needs_input";
@@ -24,6 +31,21 @@ export type Vendor = {
   checkUrl?: string;
   note?: string;
   liveTracked?: "vercel_api" | "odo_cost_api" | "self_instrumented" | null;
+
+  /** Real recurring monthly charge, in USD. 0 where nothing is actually
+   *  billed today (free tier, deferred, not used) — not an estimate. */
+  monthlyFixedAmount: number;
+  /** Day-of-month the fixed charge bills, e.g. "1st". Undefined when
+   *  monthlyFixedAmount is 0 (nothing to date). */
+  paymentDate?: string;
+  /** Manually-tracked usage spend for the current month, in USD. 0 where
+   *  not measured yet — for vendors with vercelServiceMatch, the real
+   *  Vercel API figure overrides this at render time. */
+  usageAmountThisMonth: number;
+  /** Lowercase substrings to match against Vercel's live ServiceName, so
+   *  this vendor's row shows the real billed figure instead of the 0
+   *  fallback above. Only set for vendors actually billed through Vercel. */
+  vercelServiceMatch?: string[];
 };
 
 export const FEATURES = [
@@ -45,6 +67,9 @@ export const VENDORS: Vendor[] = [
     verifyStatus: "confirmed",
     checkUrl: "https://typesafe.ai",
     liveTracked: "odo_cost_api",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
+    note: "ODO's own cost tracker has the exact figure but isn't wired into this dashboard yet — showing 0 until that API is connected, not a confirmed zero spend.",
   },
   {
     id: "anthropic-claude",
@@ -54,8 +79,10 @@ export const VENDORS: Vendor[] = [
     billingNote: "$3/M input tokens, $15/M output tokens — shared by 2 features, ODO's portion measured, Live Chat's not yet",
     verifyStatus: "confirmed",
     checkUrl: "https://console.anthropic.com/settings/billing",
-    note: "ODO's share is exact via the cost tracker. Live Chat's share needs the Admin API key to measure — not wired yet.",
+    note: "ODO's share is exact via the cost tracker (not wired into this dashboard yet — showing 0, not a confirmed zero). Live Chat's share needs the Admin API key to measure at all.",
     liveTracked: "odo_cost_api",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
   },
   {
     id: "tavily",
@@ -65,6 +92,9 @@ export const VENDORS: Vendor[] = [
     billingNote: "Free tier: 1,000 credits/mo ≈ 500 scans. Beyond that: ~$0.008/search",
     verifyStatus: "confirmed",
     checkUrl: "https://app.tavily.com",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
+    note: "Inside free tier — real overage $ not tracked here yet.",
   },
   {
     id: "google-places",
@@ -74,7 +104,9 @@ export const VENDORS: Vendor[] = [
     billingNote: "Usage-based — the old $200/mo blanket credit ended in early 2025",
     verifyStatus: "verify",
     checkUrl: "https://console.cloud.google.com/billing",
-    note: "Being checked directly in Google Cloud billing (transactions vs. a hold) — not yet confirmed either way.",
+    note: "Being checked directly in Google Cloud billing (transactions vs. a hold) — not yet confirmed either way. 0 shown means unmeasured, not confirmed free.",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
   },
   {
     id: "geoapify",
@@ -84,6 +116,8 @@ export const VENDORS: Vendor[] = [
     billingNote: "Free tier, cap not independently re-verified this session",
     verifyStatus: "verify",
     checkUrl: "https://myprojects.geoapify.com",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
   },
   {
     id: "free-public-apis",
@@ -92,6 +126,8 @@ export const VENDORS: Vendor[] = [
     billingType: "free",
     billingNote: "$0 — public APIs, no key or billing account",
     verifyStatus: "confirmed",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
   },
   {
     id: "hibp",
@@ -101,18 +137,23 @@ export const VENDORS: Vendor[] = [
     billingNote: "Built, not activated. Core tier from $4.39/mo when turned on",
     verifyStatus: "confirmed",
     checkUrl: "https://haveibeenpwned.com/Subscription",
-    note: "Deferred ~3-4 months by Mohammad's own decision, not a gap.",
+    note: "Deferred ~3-4 months by Mohammad's own decision, not a gap. Will need a real payment date entered here once activated.",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
   },
   {
     id: "upstash-redis",
     name: "Upstash Redis",
     usedBy: ["ODO", "Cyber Health Assessment", "My Scope"],
     billingType: "usage",
-    billingNote: "Pay-as-you-go, covered by Vercel's $20/mo included credit (Hobby plan). Confirmed live: $1.98 used of $20 budget.",
+    billingNote: "Pay-as-you-go, covered by Vercel's $20/mo included credit (Hobby plan).",
     verifyStatus: "confirmed",
     checkUrl: "https://vercel.com/oragrol/~/stores",
     note: "Managed entirely through Vercel (not a standalone Upstash.com account) — verified 2026-09-30.",
     liveTracked: "vercel_api",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
+    vercelServiceMatch: ["redis", "kv"],
   },
   {
     id: "upstash-qstash",
@@ -122,6 +163,9 @@ export const VENDORS: Vendor[] = [
     billingNote: "Free tier: 1,000 messages/day. Same Vercel-managed account as Redis above.",
     verifyStatus: "verify",
     liveTracked: "vercel_api",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
+    vercelServiceMatch: ["qstash"],
   },
   {
     id: "resend",
@@ -132,6 +176,8 @@ export const VENDORS: Vendor[] = [
     verifyStatus: "confirmed",
     checkUrl: "https://resend.com/emails",
     note: "Was completely untracked before the 2026-09-30 audit — five features share this free-tier cap.",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
   },
   {
     id: "hubspot",
@@ -141,6 +187,8 @@ export const VENDORS: Vendor[] = [
     billingNote: "Free CRM, at the 10/10 custom-property cap. Upgrade would run ~$7-20/mo/seat",
     verifyStatus: "confirmed",
     checkUrl: "https://app.hubspot.com/billing",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
   },
   {
     id: "brevo",
@@ -150,6 +198,8 @@ export const VENDORS: Vendor[] = [
     billingNote: "Free tier: 300 emails/day. Starter ~$20/mo for 5,000/mo beyond that",
     verifyStatus: "confirmed",
     checkUrl: "https://app.brevo.com",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
   },
   {
     id: "vercel",
@@ -160,6 +210,9 @@ export const VENDORS: Vendor[] = [
     verifyStatus: "confirmed",
     checkUrl: "https://vercel.com/oragrol/~/settings/billing",
     liveTracked: "vercel_api",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
+    vercelServiceMatch: ["vercel", "hosting", "compute", "function", "bandwidth"],
   },
   {
     id: "github",
@@ -168,6 +221,8 @@ export const VENDORS: Vendor[] = [
     billingType: "free",
     billingNote: "$0 — personal/free account, private repos included",
     verifyStatus: "confirmed",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
   },
   {
     id: "apitemplate",
@@ -176,15 +231,20 @@ export const VENDORS: Vendor[] = [
     billingType: "not_used",
     billingNote: "Not actually used — older notes carried a $19/mo line for this, but every PDF is generated in-process with the free @react-pdf/renderer library. Still named in the privacy policy as a data processor, which isn't accurate anymore.",
     verifyStatus: "confirmed",
+    monthlyFixedAmount: 0,
+    usageAmountThisMonth: 0,
   },
 ];
 
 export function totalConfirmedFixedMonthly(): number {
-  // Nothing here is a real fixed monthly charge today — every "fixed" line
-  // in older notes turned out to be $0 (free tier) or not actually used.
-  // Kept as a function (not a hardcoded number) so it's obviously
-  // recomputed, not stale, once something actually becomes a paid plan.
-  return 0;
+  return VENDORS.reduce((sum, v) => sum + v.monthlyFixedAmount, 0);
+}
+
+/** Manual (non-live) usage $ this month. Vendors with vercelServiceMatch
+ *  are excluded — their real number comes from the live API instead, added
+ *  on top of this at render time so nothing is double-counted or stale. */
+export function totalManualUsageThisMonth(): number {
+  return VENDORS.filter((v) => !v.vercelServiceMatch).reduce((sum, v) => sum + v.usageAmountThisMonth, 0);
 }
 
 export const BILLING_TYPES: BillingType[] = ["usage", "fixed", "free", "deferred", "not_used"];
